@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Интерактивный тренажёр: действия при пролонгированной децелерации и острой гипоксии плода. Лента КТГ идёт в реальном времени, действия отмечаются прямо на ленте.">
+<meta name="theme-color" content="#eef2fb">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Пролонгированная децелерация — тренажёр действий">
+<meta property="og:description" content="Семь клинических сценариев острой гипоксии плода. Лента реагирует на ваши действия, разбор по правилу трёх минут.">
+<meta property="og:locale" content="ru_RU">
+<title>Пролонгированная децелерация — тренажёр действий</title>
+<style>
+:root{
+  --bg:#eef2fb; --surface:#fff; --ink:#1b2333; --ink-soft:#59637a;
+  --accent:#1a44c2; --line:#dfe5f3;
+  --ok:#1f7a3f; --warn:#b07800; --bad:#c0392b;
+  --radius:14px; --shadow:0 1px 2px rgba(27,35,51,.06),0 8px 24px rgba(27,35,51,.06);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:14px 12px calc(24px + env(safe-area-inset-bottom));
+}
+.wrap{max-width:980px;margin:0 auto}
+h1{font-size:clamp(18px,4.4vw,24px);line-height:1.2;letter-spacing:-.02em;color:var(--accent);margin:0 0 4px}
+.sub{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px}
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:12px}
+
+/* --- клинический контекст --- */
+.ctx{
+  border-left:3px solid var(--accent);background:#f4f7ff;
+  border-radius:0 10px 10px 0;padding:10px 12px;font-size:14.5px;line-height:1.45;margin-bottom:12px;
+}
+.ctx b{color:var(--accent)}
+
+/* --- таймер --- */
+.bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.clock{font:700 40px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.02em;min-width:120px}
+.clock small{display:block;font:400 11.5px/1 -apple-system,sans-serif;color:var(--ink-soft);margin-top:6px;letter-spacing:0}
+.clock.t1{color:var(--ink)} .clock.t2{color:var(--warn)} .clock.t3{color:var(--bad)}
+.speed{display:flex;gap:5px;margin-left:auto}
+.speed button{
+  appearance:none;cursor:pointer;min-height:38px;padding:0 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font:600 13px/1 inherit;
+}
+.speed button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* --- лента --- */
+.strip{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px;background:#fff}
+canvas{display:block}
+
+/* --- действия --- */
+.grp{margin-top:14px}
+.grp h3{font-size:12.5px;font-weight:600;color:var(--ink-soft);margin:0 0 7px;letter-spacing:.01em}
+.acts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px}
+.act{
+  appearance:none;cursor:pointer;min-height:50px;padding:8px 10px;text-align:left;
+  border:1px solid var(--line);border-radius:11px;background:var(--surface);
+  color:var(--ink);font:500 13.5px/1.28 inherit;position:relative;
+}
+.act:active{transform:scale(.98)}
+.act:focus-visible{outline:3px solid #9db4ff;outline-offset:2px}
+.act[data-done="1"]{background:#eef4ff;border-color:#b9cbff;color:var(--accent);font-weight:600}
+.act[data-done="1"]::after{content:"✓";position:absolute;top:6px;right:8px;font-size:12px}
+.act[disabled]{opacity:.4;cursor:default}
+.act.crit{border-color:#f0c2bd}
+.act.crit[data-done="1"]{background:#fdf0ee;border-color:#e08d84;color:var(--bad)}
+
+/* --- журнал --- */
+.log{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;line-height:1.45}
+.log-row{display:flex;gap:10px;padding:4px 0}
+.log-row .tm{flex:0 0 52px;font:600 13px/1.45 ui-monospace,monospace;color:var(--ink-soft)}
+.log-row .n{flex:0 0 20px;font:700 12px/1.55 ui-monospace,monospace;color:var(--accent)}
+.log-row.find{color:var(--bad);font-weight:600}
+
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.btn{
+  appearance:none;cursor:pointer;min-height:48px;padding:0 18px;border-radius:11px;
+  font:600 15px/1 inherit;border:1px solid var(--accent);background:var(--accent);color:#fff;
+}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.danger{background:var(--bad);border-color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible{outline:3px solid #9db4ff;outline-offset:2px}
+
+/* --- разбор --- */
+.debrief{display:none}
+.debrief.on{display:block}
+.outc{display:flex;flex-wrap:wrap;gap:18px;align-items:baseline;margin-bottom:14px}
+.outc div b{display:block;font:700 27px/1 ui-monospace,monospace}
+.outc div span{font-size:12px;color:var(--ink-soft)}
+.item{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14.5px;line-height:1.42}
+.item:first-of-type{border-top:0}
+.item .mk{flex:0 0 20px;font-size:16px}
+.item .tx b{display:block;font-size:13px;color:var(--ink-soft);font-weight:600;margin-bottom:2px}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+.teach{margin-top:14px;padding:12px;background:#f4f7ff;border-radius:10px;font-size:14.5px;line-height:1.5}
+.teach b{color:var(--accent)}
+.note{font-size:12.5px;color:var(--ink-soft);line-height:1.45;margin-top:12px}
+
+@media (max-width:420px){ .acts{grid-template-columns:1fr 1fr} .clock{font-size:34px} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Пролонгированная децелерация</h1>
+<p class="sub">Лента идёт в реальном времени. Отмечайте действия — лента на них отвечает.</p>
+
+<div class="card">
+  <div class="ctx" id="ctx"></div>
+
+  <div class="bar">
+    <div class="clock t1" id="clock">0:00<small>от начала децелерации</small></div>
+    <div class="speed" role="group" aria-label="Скорость">
+      <button data-s="1" aria-pressed="false">×1</button>
+      <button data-s="4" aria-pressed="true">×4</button>
+      <button data-s="10" aria-pressed="false">×10</button>
+    </div>
+  </div>
+
+  <div class="strip" id="strip"><canvas id="cv"></canvas></div>
+
+  <div class="grp">
+    <h3>Немедленно</h3>
+    <div class="acts" id="g1"></div>
+  </div>
+  <div class="grp">
+    <h3>Устранение причины</h3>
+    <div class="acts" id="g2"></div>
+  </div>
+  <div class="grp">
+    <h3>Родоразрешение</h3>
+    <div class="acts" id="g3"></div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <div class="row">
+    <button class="btn ghost" id="pause">Пауза</button>
+    <button class="btn ghost" id="fresh">Новый случай</button>
+  </div>
+</div>
+
+<div class="card debrief" id="debrief"></div>
+
+<p class="note">
+  Прототип. Динамика ЧСС и падение pH — упрощённая модель для отработки последовательности действий,
+  а не физиологический симулятор. Пороги времени взяты по «правилу трёх минут»:
+  3 — помощь и исключение острых событий, 6 — операционная, 9 — решение, 12–15 — извлечение плода.
+</p>
+
+</div>
+
+<script>
+/* ==========================================================
+   СЦЕНАРИИ
+   ========================================================== */
+const SCEN = [
+  {
+    id:'hyper',
+    ctx:'<b>Первый период родов, 39 недель.</b> Родовозбуждение окситоцином 12 мл/ч, открытие 6 см. Эпидуральной анальгезии нет. Схватки за последние 10 минут — 6 за 10 минут.',
+    cause:'Гиперстимуляция матки окситоцином',
+    fix:['oxy','toco'],
+    toco:{ int:70, amp:58, tone:26 },
+    nadir:72, oxytocin:true,
+    veFind:null,
+    teach:'Тахисистолия — самая частая и самая обратимая причина пролонгированной децелерации. Матка не успевает расслабиться, межворсинчатый кровоток не восстанавливается. Остановка окситоцина работает медленно, поэтому при выраженной брадикардии её дополняют острым токолизом.'
+  },
+  {
+    id:'hypo',
+    ctx:'<b>Первый период родов, 40 недель.</b> Восемь минут назад введена тестовая доза эпидуральной анальгезии. Окситоцин 6 мл/ч. АД матери 80/45 мм рт. ст.',
+    cause:'Артериальная гипотензия после эпидуральной анальгезии',
+    fix:['pos','fluid'],
+    toco:{ int:160, amp:52, tone:11 },
+    nadir:78, oxytocin:true,
+    veFind:null,
+    teach:'Падение АД матери снижает перфузию межворсинчатого пространства. Плод здесь вторичен — лечить надо мать: положение, объём, при необходимости вазопрессор. Токолиз тут не поможет, а окситоцин всё равно стоит остановить.'
+  },
+  {
+    id:'aorto',
+    ctx:'<b>Первый период родов, 38 недель.</b> Роженица только что легла на спину для осмотра. Окситоцина нет, эпидуральной анальгезии нет. АД 105/65 мм рт. ст.',
+    cause:'Аортокавальная компрессия в положении на спине',
+    fix:['pos'],
+    toco:{ int:170, amp:50, tone:10 },
+    nadir:80, oxytocin:false,
+    veFind:null,
+    teach:'Самая дешёвая в исправлении причина. Одно движение — поворот на левый бок — снимает сдавление нижней полой вены. Прежде чем строить сложные гипотезы, посмотрите, в каком положении лежит женщина.'
+  },
+  {
+    id:'push',
+    ctx:'<b>Второй период родов, 41 неделя.</b> Потуги 25 минут, головка на тазовом дне. Окситоцин 10 мл/ч.',
+    cause:'Быстрое опускание головки на фоне непрерывных потуг',
+    fix:['push'],
+    toco:{ int:90, amp:70, tone:18 },
+    nadir:75, oxytocin:true,
+    veFind:null,
+    teach:'Во втором периоде плод переносит нагрузку хуже: потуги на фоне схваток почти не оставляют пауз. Прекращение потуг на несколько схваток часто восстанавливает ритм и позволяет закончить роды через естественные пути.'
+  },
+  {
+    id:'prolapse',
+    ctx:'<b>Первый период родов, 39 недель.</b> Три минуты назад произошло излитие околоплодных вод. Открытие 7 см, головка над входом в малый таз. Окситоцин 8 мл/ч.',
+    cause:'Выпадение петель пуповины',
+    fix:null,
+    toco:{ int:160, amp:50, tone:11 },
+    nadir:64, oxytocin:true,
+    veFind:'При влагалищном исследовании во влагалище определяются пульсирующие петли пуповины.',
+    teach:'Одно из трёх острых событий, которые исключаются в первую очередь. Консервативные меры бесполезны — нужны смещение предлежащей части вверх, коленно-локтевое положение и экстренное родоразрешение. Ключ к диагнозу — влагалищное исследование, а не разглядывание ленты.'
+  },
+  {
+    id:'abrupt',
+    ctx:'<b>Первый период родов, 37 недель.</b> Внезапная постоянная боль в животе, тёмные кровянистые выделения. Окситоцина нет. АД 145/95 мм рт. ст.',
+    cause:'Преждевременная отслойка нормально расположенной плаценты',
+    fix:null,
+    toco:{ int:110, amp:22, tone:52 },
+    nadir:68, oxytocin:false,
+    veFind:'Матка в гипертонусе, между схватками не расслабляется, кровянистые выделения продолжаются.',
+    teach:'Гипертонус матки на токограмме плюс боль и кровотечение. Токолиз здесь противопоказан. Обратимой причины нет — счёт идёт на минуты, единственное решение — родоразрешение.'
+  },
+  {
+    id:'rupture',
+    ctx:'<b>Первый период родов, 39 недель.</b> Рубец на матке после кесарева сечения. Родовозбуждение окситоцином 10 мл/ч, открытие 8 см. Роженица жалуется на постоянную боль в области рубца.',
+    cause:'Разрыв матки по рубцу',
+    fix:null,
+    toco:{ int:120, amp:45, tone:12, ceases:true },
+    nadir:62, oxytocin:true,
+    veFind:'Предлежащая часть подвижна и определяется выше, чем ранее, схватки прекратились.',
+    teach:'Классическая триада — пролонгированная децелерация, прекращение схваток на токограмме и подъём предлежащей части. Ленту при рубце на матке нужно читать вместе с токограммой: исчезновение сокращений здесь важнее, чем сама брадикардия.'
+  }
+];
+
+/* ==========================================================
+   ДЕЙСТВИЯ
+   ========================================================== */
+const ACTS = [
+  { id:'help',  g:1, label:'Позвать на помощь' },
+  { id:'oxy',   g:1, label:'Остановить окситоцин' },
+  { id:'ve',    g:1, label:'Влагалищное исследование' },
+  { id:'pos',   g:2, label:'Положение на левый бок' },
+  { id:'fluid', g:2, label:'Болюс инфузии' },
+  { id:'toco',  g:2, label:'Острый токолиз' },
+  { id:'push',  g:2, label:'Прекратить потуги' },
+  { id:'o2',    g:2, label:'Кислород маской' },
+  { id:'theat', g:3, label:'Перевод в операционную', crit:true },
+  { id:'deliv', g:3, label:'Решение о родоразрешении', crit:true }
+];
+
+/* ==========================================================
+   СОСТОЯНИЕ
+   ========================================================== */
+const FS = 4, T0 = 90, TMAX = 1200;        // децелерация начинается на 90-й секунде
+let sc, fhr, uc, simT, acc, speed = 4, running = false, over = false;
+let done, log, recoverAt, delivAt, lastT;
+
+/* ==========================================================
+   ХОЛСТ
+   ========================================================== */
+const cv = document.getElementById('cv'), ctx2 = cv.getContext('2d');
+const PXMIN = 52, MINS = 18;
+const W = PXMIN*MINS, FT = 10, FH = 230, TT = FT+FH+20, TH = 78, H = TT+TH+10;
+const BMAX = 210, BMIN = 50;
+const yF = b => FT + (BMAX-b)/(BMAX-BMIN)*FH;
+const xT = t => t/(MINS*60)*W;
+
+(function fit(){
+  const dpr = Math.min(devicePixelRatio||1, 2);
+  cv.width = W*dpr; cv.height = H*dpr;
+  cv.style.width = W+'px'; cv.style.height = H+'px';
+  ctx2.setTransform(dpr,0,0,dpr,0,0);
+})();
+
+/* ==========================================================
+   МОДЕЛЬ СИГНАЛА
+   ========================================================== */
+const BASE = 142;
+
+function targetAt(t){
+  if (t < T0) return BASE;
+  if (recoverAt === null || t < recoverAt){
+    const p = Math.min(1, (t-T0)/35);
+    return BASE - (BASE - sc.nadir)*p;
+  }
+  const p = Math.min(1, (t-recoverAt)/95);
+  return sc.nadir + (BASE - sc.nadir)*p;
+}
+
+function varAmpAt(t){
+  if (t < T0) return 11;
+  if (recoverAt !== null && t > recoverAt + 95) return 8;   // после восстановления вариабельность снижена
+  const brady = t - T0;
+  return Math.max(1.5, 11 - brady/45);                       // на фоне брадикардии угасает
+}
+
+let ou = 0;
+function step(){
+  const t = simT;
+  ou = ou*0.94 + (Math.random()*2-1);
+  const v = ou * varAmpAt(t) * 0.42;
+  fhr.push(Math.max(BMIN, Math.min(BMAX, targetAt(t) + v + (Math.random()-0.5)*0.7)));
+
+  // токограмма
+  const c = sc.toco;
+  let u = c.tone + Math.sin(t/13)*1.3;
+  const ceased = c.ceases && t > T0 + 20;
+  const tocolysed = done.toco && t > done.toco + 45;
+  if (!ceased && !tocolysed){
+    const ph = ((t % c.int) / c.int - 0.5);
+    u += c.amp * Math.exp(-16*ph*ph);
+  }
+  if (ceased) u = 8 + Math.sin(t/17)*1.2;
+  uc.push(Math.max(0, Math.min(100, u)));
+}
+
+/* ==========================================================
+   ОТРИСОВКА
+   ========================================================== */
+function draw(){
+  ctx2.clearRect(0,0,W,H);
+  ctx2.fillStyle = '#fff'; ctx2.fillRect(0,0,W,H);
+
+  for (let b = BMIN; b <= BMAX; b += 10){
+    ctx2.strokeStyle = b%30===0 ? '#f0c9c2' : '#fbe6e2'; ctx2.lineWidth = 1;
+    ctx2.beginPath(); ctx2.moveTo(0,yF(b)+.5); ctx2.lineTo(W,yF(b)+.5); ctx2.stroke();
+    if (b%30===0){ ctx2.fillStyle='#b98b82'; ctx2.font='10px ui-monospace,monospace'; ctx2.fillText(b,3,yF(b)-3); }
+  }
+  ctx2.fillStyle = 'rgba(63,157,91,.06)'; ctx2.fillRect(0, yF(160), W, yF(110)-yF(160));
+  ctx2.fillStyle = 'rgba(192,57,43,.05)'; ctx2.fillRect(0, yF(100), W, yF(BMIN)-yF(100));
+
+  for (let u = 0; u <= 100; u += 20){
+    const y = TT + (100-u)/100*TH;
+    ctx2.strokeStyle = '#fbe6e2'; ctx2.beginPath(); ctx2.moveTo(0,y+.5); ctx2.lineTo(W,y+.5); ctx2.stroke();
+  }
+  for (let m = 0; m <= MINS; m++){
+    const x = xT(m*60);
+    ctx2.strokeStyle = '#f0c9c2'; ctx2.beginPath(); ctx2.moveTo(x+.5,FT); ctx2.lineTo(x+.5,TT+TH); ctx2.stroke();
+  }
+
+  // отметка начала децелерации и пороги 3 / 6 / 9 / 12 / 15
+  [[T0,'начало','#16233d']].concat(
+    [3,6,9,12,15].map(m=>[T0+m*60, m+"'", m<=3?'#3f9d5b':m<=6?'#d9a316':'#c0392b'])
+  ).forEach(([t,lab,col])=>{
+    if (t > MINS*60) return;
+    ctx2.strokeStyle = col; ctx2.lineWidth = 1; ctx2.setLineDash([3,3]);
+    ctx2.beginPath(); ctx2.moveTo(xT(t)+.5, FT); ctx2.lineTo(xT(t)+.5, FT+FH); ctx2.stroke();
+    ctx2.setLineDash([]);
+    ctx2.fillStyle = col; ctx2.font = '600 10px -apple-system,sans-serif';
+    ctx2.fillText(lab, xT(t)+3, FT+FH-4);
+  });
+
+  // кривые
+  ctx2.strokeStyle = '#16233d'; ctx2.lineWidth = 1.3; ctx2.beginPath();
+  for (let i = 0; i < fhr.length; i += 2){
+    const x = xT(i/FS), y = yF(fhr[i]); i ? ctx2.lineTo(x,y) : ctx2.moveTo(x,y);
+  }
+  ctx2.stroke();
+
+  ctx2.strokeStyle = '#46527a'; ctx2.lineWidth = 1.1; ctx2.beginPath();
+  for (let i = 0; i < uc.length; i += 4){
+    const x = xT(i/FS), y = TT + (100-uc[i])/100*TH; i ? ctx2.lineTo(x,y) : ctx2.moveTo(x,y);
+  }
+  ctx2.stroke();
+
+  // ОТМЕТКИ ДЕЙСТВИЙ НА ЛЕНТЕ
+  log.forEach((e,i)=>{
+    if (e.kind !== 'act') return;
+    const x = xT(e.t);
+    ctx2.strokeStyle = e.crit ? '#c0392b' : '#1a44c2'; ctx2.lineWidth = 1.8;
+    ctx2.beginPath(); ctx2.moveTo(x+.5, FT); ctx2.lineTo(x+.5, TT+TH); ctx2.stroke();
+    ctx2.fillStyle = e.crit ? '#c0392b' : '#1a44c2';
+    ctx2.beginPath(); ctx2.arc(x, FT+9, 9, 0, 7); ctx2.fill();
+    ctx2.fillStyle = '#fff'; ctx2.font = '700 11px ui-monospace,monospace';
+    ctx2.textAlign = 'center'; ctx2.fillText(e.n, x, FT+13); ctx2.textAlign = 'left';
+  });
+}
+
+/* ==========================================================
+   ЦИКЛ
+   ========================================================== */
+function tick(now){
+  if (!running){ lastT = now; requestAnimationFrame(tick); return; }
+  const dt = Math.min(0.25, (now - lastT)/1000); lastT = now;
+  acc += dt*speed;
+  while (acc >= 0.25 && simT < MINS*60){ step(); simT += 0.25; acc -= 0.25; }
+
+  // проверка исхода
+  if (!over){
+    if (recoverAt !== null && simT > recoverAt + 100 && targetAt(simT) > 105) finish('recover');
+    else if (delivAt !== null && simT >= delivAt) finish('deliver');
+    else if (simT >= MINS*60 - 1) finish('timeout');
+  }
+  updClock(); draw(); autoScroll();
+  requestAnimationFrame(tick);
+}
+function autoScroll(){
+  const s = document.getElementById('strip');
+  const target = xT(simT) - s.clientWidth*0.62;
+  if (target > 0) s.scrollLeft = target;
+}
+function updClock(){
+  const el = document.getElementById('clock');
+  const s = Math.max(0, Math.floor(simT - T0));
+  el.className = 'clock ' + (s < 180 ? 't1' : s < 540 ? 't2' : 't3');
+  el.innerHTML = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0') +
+    '<small>от начала децелерации</small>';
+}
+
+/* ==========================================================
+   ДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЯ
+   ========================================================== */
+let seq = 0;
+function doAct(a){
+  if (over || done[a.id] !== undefined) return;
+  const t = simT;
+  done[a.id] = t;
+  seq++;
+  log.push({ kind:'act', n:seq, t, id:a.id, label:a.label, crit:!!a.crit });
+
+  document.querySelector('[data-act="'+a.id+'"]').dataset.done = '1';
+
+  // находки при влагалищном исследовании
+  if (a.id === 've' && sc.veFind) log.push({ kind:'find', t, text: sc.veFind });
+  if (a.id === 've' && !sc.veFind)
+    log.push({ kind:'find2', t, text:'Выпадения пуповины нет, матка мягкая между схватками, предлежащая часть на прежнем уровне.' });
+
+  // причина устранена?
+  if (sc.fix && recoverAt === null && sc.fix.every(k => done[k] !== undefined)){
+    recoverAt = t + 35;                                  // латентность до ответа
+    log.push({ kind:'find2', t, text:'ЧСС плода начинает восстанавливаться.' });
+  }
+
+  // родоразрешение
+  if (a.id === 'deliv'){
+    const prepped = done.theat !== undefined;
+    delivAt = t + (prepped ? 110 : 190);
+    log.push({ kind:'find2', t, text: prepped
+      ? 'Операционная готова. Извлечение плода ожидается через 2 минуты.'
+      : 'Операционная не подготовлена. Извлечение плода ожидается через 3 минуты.' });
+  }
+
+  renderLog(); draw();
+}
+
+function renderLog(){
+  document.getElementById('log').innerHTML = log.map(e=>{
+    const s = Math.max(0, Math.floor(e.t - T0));
+    const tm = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+    if (e.kind === 'act')
+      return `<div class="log-row"><span class="tm">${tm}</span><span class="n">${e.n}</span><span>${e.label}</span></div>`;
+    return `<div class="log-row ${e.kind==='find'?'find':''}"><span class="tm">${tm}</span><span class="n"></span><span>${e.text}</span></div>`;
+  }).join('') || '<div class="log-row" style="color:var(--ink-soft)">Действий пока нет.</div>';
+}
+
+/* ==========================================================
+   РАЗБОР
+   ========================================================== */
+function finish(how){
+  over = true; running = false;
+  document.getElementById('pause').disabled = true;
+  document.querySelectorAll('.act').forEach(b => b.disabled = true);
+
+  // pH: падает, пока ЧСС ниже 100
+  let pH = 7.31;
+  for (let i = 0; i < fhr.length; i++) if (fhr[i] < 100) pH -= 0.01/(60*FS);
+  pH = Math.max(6.80, pH);
+
+  const min = t => t === undefined ? null : (t - T0)/60;
+  const out = [];
+  const chk = (cond, ttl, txt) => out.push([cond, cond==='ok'?'✓':cond==='warn'?'!':'✕', ttl, txt]);
+
+  // 1. помощь
+  const th = min(done.help);
+  if (th === null) chk('bad','Помощь не вызвана','Первое действие при пролонгированной децелерации — позвать на помощь. В одиночку алгоритм не выполняется.');
+  else if (th <= 3) chk('ok','Помощь вызвана', th.toFixed(1)+' мин — в пределах первых трёх минут.');
+  else chk('warn','Помощь вызвана поздно', th.toFixed(1)+' мин. Норматив — до 3 минут.');
+
+  // 2. окситоцин
+  if (sc.oxytocin){
+    const to = min(done.oxy);
+    if (to === null) chk('bad','Окситоцин не остановлен','Инфузия продолжалась всю децелерацию. Остановка окситоцина обязательна независимо от причины.');
+    else if (to <= 3) chk('ok','Окситоцин остановлен', to.toFixed(1)+' мин.');
+    else chk('warn','Окситоцин остановлен поздно', to.toFixed(1)+' мин.');
+  }
+
+  // 3. влагалищное исследование
+  const tv = min(done.ve);
+  if (tv === null) chk('bad','Влагалищное исследование не выполнено','Без него нельзя исключить выпадение пуповины, отслойку и разрыв матки. Это обязательный шаг, а не опция.');
+  else if (tv <= 4) chk('ok','Острые события исключены', tv.toFixed(1)+' мин.');
+  else chk('warn','Исследование выполнено поздно', tv.toFixed(1)+' мин.');
+
+  // 4. причина
+  if (sc.fix){
+    const tf = recoverAt === null ? null : (recoverAt - 35 - T0)/60;
+    if (tf === null) chk('bad','Причина не устранена','Причина была обратимой: '+sc.cause.toLowerCase()+'. Нужные действия — '+sc.fix.map(k=>ACTS.find(a=>a.id===k).label.toLowerCase()).join(' + ')+'.');
+    else if (tf <= 6) chk('ok','Причина устранена', sc.cause+'. Время до устранения — '+tf.toFixed(1)+' мин.');
+    else chk('warn','Причина устранена с опозданием', sc.cause+', '+tf.toFixed(1)+' мин.');
+  } else {
+    const td = min(done.deliv);
+    if (td === null) chk('bad','Решение о родоразрешении не принято','Обратимой причины не было: '+sc.cause.toLowerCase()+'. Единственный путь — родоразрешение.');
+    else if (td <= 9) chk('ok','Решение о родоразрешении', td.toFixed(1)+' мин — вовремя.');
+    else chk('warn','Решение принято поздно', td.toFixed(1)+' мин. При отсутствии ответа на консервативные меры решение принимается к 9-й минуте.');
+    const tt = min(done.theat);
+    if (tt !== null && td !== null && tt < td) chk('ok','Операционная подготовлена заранее','Это сократило время до извлечения плода.');
+  }
+
+  // 5. лишние и опасные действия
+  if (done.toco !== undefined && sc.id === 'abrupt')
+    chk('bad','Токолиз при отслойке','Острый токолиз при отслойке плаценты противопоказан — он усиливает кровотечение и задерживает родоразрешение.');
+  if (done.o2 !== undefined)
+    chk('warn','Кислород маской','Рутинная подача кислорода при нормальной сатурации у матери пользы не приносит и данными не подтверждена. Время лучше потратить на устранение причины.');
+
+  // исход
+  const tot = (simT - T0)/60;
+  let apgar, verdict, vcl;
+  if (pH >= 7.20){ apgar = '8/9'; verdict = 'Плод не пострадал'; vcl = 'ok'; }
+  else if (pH >= 7.10){ apgar = '6/8'; verdict = 'Умеренный ацидоз'; vcl = 'warn'; }
+  else if (pH >= 7.00){ apgar = '4/7'; verdict = 'Выраженный ацидоз'; vcl = 'bad'; }
+  else { apgar = '2/5'; verdict = 'Тяжёлый ацидоз'; vcl = 'bad'; }
+
+  const howTxt = how === 'recover' ? 'Ритм восстановился, роды продолжены.'
+               : how === 'deliver' ? 'Плод извлечён.'
+               : 'Время вышло — решение не принято.';
+  if (how === 'timeout') { verdict = 'Критическая задержка'; vcl = 'bad'; }
+
+  document.getElementById('debrief').innerHTML = `
+    <div class="outc">
+      <div><b class="${vcl}">${pH.toFixed(2)}</b><span>pH пуповинной артерии</span></div>
+      <div><b class="${vcl}">${apgar}</b><span>Апгар</span></div>
+      <div><b>${tot.toFixed(1)}</b><span>минут от начала</span></div>
+      <div><b style="font-size:15px" class="${vcl}">${verdict}</b><span>${howTxt}</span></div>
+    </div>
+    ${out.map(([cl,mk,t,x])=>`<div class="item"><span class="mk ${cl}">${mk}</span><span class="tx"><b>${t}</b>${x}</span></div>`).join('')}
+    <div class="teach"><b>Причина: ${sc.cause}.</b><br>${sc.teach}</div>`;
+  document.getElementById('debrief').classList.add('on');
+  document.getElementById('debrief').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ==========================================================
+   ЗАПУСК
+   ========================================================== */
+function build(){
+  [1,2,3].forEach(g=>{
+    document.getElementById('g'+g).innerHTML = ACTS.filter(a=>a.g===g)
+      .map(a=>`<button class="act${a.crit?' crit':''}" data-act="${a.id}">${a.label}</button>`).join('');
+  });
+  document.querySelectorAll('.act').forEach(b=>{
+    b.onclick = () => doAct(ACTS.find(a=>a.id===b.dataset.act));
+  });
+}
+
+function fresh(){
+  sc = SCEN[Math.floor(Math.random()*SCEN.length)];
+  fhr = []; uc = []; simT = 0; acc = 0; ou = 0; seq = 0;
+  done = {}; log = []; recoverAt = null; delivAt = null; over = false; running = true;
+  document.getElementById('ctx').innerHTML = sc.ctx;
+  document.getElementById('debrief').classList.remove('on');
+  document.getElementById('pause').disabled = false;
+  document.getElementById('pause').textContent = 'Пауза';
+  document.querySelectorAll('.act').forEach(b=>{ b.disabled = false; delete b.dataset.done; });
+  renderLog(); updClock(); draw();
+  document.getElementById('strip').scrollLeft = 0;
+}
+
+document.getElementById('fresh').onclick = fresh;
+document.getElementById('pause').onclick = e => {
+  if (over) return;
+  running = !running;
+  e.target.textContent = running ? 'Пауза' : 'Продолжить';
+};
+document.querySelectorAll('.speed button').forEach(b=>{
+  b.onclick = () => {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.speed button').forEach(o=>o.setAttribute('aria-pressed', String(o===b)));
+  };
+});
+
+build(); fresh(); lastT = performance.now(); requestAnimationFrame(tick);
+</script>
+</body>
+</html>
